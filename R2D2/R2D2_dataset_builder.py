@@ -150,8 +150,8 @@ class RecordedMultiCameraWrapper:
         self.camera_kwargs = camera_kwargs
 
         # Open Camera Readers #
-        svo_filepaths = glob.glob(recording_folderpath + "/*.svo")
         mp4_filepaths = glob.glob(recording_folderpath + "/*.mp4")
+        svo_filepaths = []
         all_filepaths = svo_filepaths + mp4_filepaths
 
         self.camera_dict = {}
@@ -160,9 +160,7 @@ class RecordedMultiCameraWrapper:
             cam_type = get_camera_type(serial_number)
             camera_kwargs.get(cam_type, {})
 
-            if f.endswith(".svo"):
-                Reader = SVOReader
-            elif f.endswith(".mp4"):
+            if f.endswith(".mp4"):
                 Reader = MP4Reader
             else:
                 raise ValueError
@@ -263,35 +261,11 @@ class TrajectoryReader:
         keys_to_ignore = [*keys_to_ignore.copy(), "videos"]
         timestep = load_hdf5_to_dict(self._hdf5_file, self._index, keys_to_ignore=keys_to_ignore)
 
-        # Load High Dimensional Data #
-        if self._read_images:
-            camera_obs = self._uncompress_images()
-            timestep["observations"]["image"] = camera_obs
-
         # Increment Read Index #
         self._index += 1
 
         # Return Timestep #
         return timestep
-
-    def _uncompress_images(self):
-        # WARNING: THIS FUNCTION HAS NOT BEEN TESTED. UNDEFINED BEHAVIOR FOR FAILED READING. #
-        video_folder = self._hdf5_file["observations/videos"]
-        camera_obs = {}
-
-        for video_id in video_folder:
-            # Create Video Reader If One Hasn't Been Made #
-            if video_id not in self._video_readers:
-                serialized_video = video_folder[video_id]
-                filename = create_video_file(byte_contents=serialized_video)
-                self._video_readers[video_id] = imageio.get_reader(filename)
-
-            # Read Next Frame #
-            camera_obs[video_id] = yield self._video_readers[video_id]
-            # Future Note: Could Make Thread For Each Image Reader
-
-        # Return Camera Observation #
-        return camera_obs
 
     def close(self):
         self._hdf5_file.close()
@@ -634,14 +608,15 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                 os.path.exists(p + '/recordings/MP4')]
 
         # for smallish datasets, use single-thread parsing
-        #for sample in episode_paths:
-        #    yield _parse_example(sample)
+        episode_paths = episode_paths[:2]
+        for sample in episode_paths:
+            yield _parse_example(sample)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
-        beam = tfds.core.lazy_imports.apache_beam
-        return (
-                 beam.Create(episode_paths)
-                 | beam.Map(_parse_example)
-        )
+        #beam = tfds.core.lazy_imports.apache_beam
+        #return (
+        #         beam.Create(episode_paths)
+        #         | beam.Map(_parse_example)
+        #)
 
 
