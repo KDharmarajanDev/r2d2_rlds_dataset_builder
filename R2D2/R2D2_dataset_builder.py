@@ -536,16 +536,20 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                 obs = step['observation']
                 action = step['action']
                 language_instruction = 'Execute a task.'
+                camera_type_dict = obs['camera_type']
+                wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
+                exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
+
                 # compute Kona language embedding
                 language_embedding = self._embed([language_instruction])[0].numpy()
                 episode.append({
                     'observation': {
-                        'exterior_image_1_left': obs['image']['29838012_left'],
-                        'exterior_image_1_right': obs['image']['29838012_right'],
-                        'exterior_image_2_left': obs['image']['23404442_left'],
-                        'exterior_image_2_right': obs['image']['23404442_right'],
-                        'wrist_image_left': obs['image']['19824535_left'],
-                        'wrist_image_right': obs['image']['19824535_right'],
+                        'exterior_image_1_left': obs['image'][f'{exterior_ids[0]}_left'],
+                        'exterior_image_1_right': obs['image'][f'{exterior_ids[0]}_right'],
+                        'exterior_image_2_left': obs['image'][f'{exterior_ids[1]}_left'],
+                        'exterior_image_2_right': obs['image'][f'{exterior_ids[1]}_right'],
+                        'wrist_image_left': obs['image'][f'{wrist_ids[0]}_left'],
+                        'wrist_image_right': obs['image'][f'{wrist_ids[0]}_right'],
                         'cartesian_position': obs['robot_state']['cartesian_position'],
                         'joint_position': obs['robot_state']['joint_positions'],
                         'gripper_position': np.array([obs['robot_state']['gripper_position']]),
