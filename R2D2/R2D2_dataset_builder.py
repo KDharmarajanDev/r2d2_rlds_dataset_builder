@@ -47,12 +47,6 @@ class MP4Reader:
         if not self._mp4_reader.isOpened():
             raise RuntimeError("Corrupted MP4 File")
 
-        # Load Recording Timestamps #
-        timestamp_filepath = filepath[:-4] + "_timestamps.json"
-        if not os.path.isfile(timestamp_filepath):
-            self._recording_timestamps = []
-        with open(timestamp_filepath, "r") as jsonFile:
-            self._recording_timestamps = json.load(jsonFile)
 
     def set_reading_parameters(
         self,
@@ -99,28 +93,18 @@ class MP4Reader:
         return self.resize_func(frame, self.resolution)
         # return cv2.resize(frame, self.resolution)#, interpolation=cv2.INTER_AREA)
 
-    def read_camera(self, ignore_data=False, correct_timestamp=None, return_timestamp=False):
+    def read_camera(self, ignore_data=False, correct_timestamp=None):
         # Skip if Read Unnecesary #
         if self.skip_reading:
             return {}
 
         # Read Camera #
         success, frame = self._mp4_reader.read()
-        try:
-            received_time = self._recording_timestamps[self._index]
-        except IndexError:
-            received_time = None
 
         self._index += 1
         if not success:
             return None
         if ignore_data:
-            return None
-
-        # Check Image Timestamp #
-        timestamps_given = (received_time is not None) and (correct_timestamp is not None)
-        if timestamps_given and (correct_timestamp != received_time):
-            print("Timestamps did not match...")
             return None
 
         # Return Data #
@@ -135,8 +119,6 @@ class MP4Reader:
                 self.serial_number + "_right": self._process_frame(frame[:, single_width:, :]),
             }
 
-        if return_timestamp:
-            return data_dict, received_time
         return data_dict
 
     def disable_camera(self):
@@ -546,13 +528,7 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
             assert all(t.keys() == data[0].keys() for t in data)
             for t in range(len(data)):
                 for key in data[0]['observation']['image'].keys():
-                    #import matplotlib.pyplot as plt
-                    #plt.imshow(data[t]['observation']['image'][key])
-                    #plt.savefig('out.png')
-                    #import pdb; pdb.set_trace()
                     data[t]['observation']['image'][key] = _resize_and_encode(data[t]['observation']['image'][key], IMAGE_SIZE)
-                    #plt.imshow(data[t]['observation']['image'][key])
-                    #plt.savefig('out.png')
             
             # assemble episode --> here we're assuming demos so we set reward to 1 at the end
             episode = []
@@ -608,7 +584,6 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                 os.path.exists(p + '/recordings/MP4')]
 
         # for smallish datasets, use single-thread parsing
-        episode_paths = episode_paths[:2]
         for sample in episode_paths:
             yield _parse_example(sample)
 
