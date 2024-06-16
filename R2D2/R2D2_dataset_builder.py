@@ -87,7 +87,8 @@ class MP4Reader:
             self.read_camera(ignore_data=True)
 
     def _process_frame(self, frame):
-        frame = deepcopy(frame)
+        # Reversed to keep RGB
+        # frame = deepcopy(frame[:,:,::-1])
         if self.resolution == (0, 0):
             return frame
         return self.resize_func(frame, self.resolution)
@@ -255,7 +256,7 @@ class TrajectoryReader:
 
 def crawler(dirname, filter_func=None):
     subfolders = [f.path for f in os.scandir(dirname) if f.is_dir()]
-    traj_files = [f.path for f in os.scandir(dirname) if (f.is_file() and "trajectory.h5" in f.path)]
+    traj_files = [f.path for f in os.scandir(dirname) if (f.is_file() and "trajectory_im128.h5" in f.path)]
 
     if len(traj_files):
         # Only Save Desired Data #
@@ -267,7 +268,9 @@ def crawler(dirname, filter_func=None):
             hdf5_file.close()
 
         if use_data:
+            # TODO(kdharmarajan): Change back for Franka
             return [dirname]
+            # return traj_files
 
     all_folderpaths = []
     for child_dirname in subfolders:
@@ -286,6 +289,8 @@ def load_trajectory(
     num_samples_per_traj=None,
     num_samples_per_traj_coeff=1.5,
 ):
+    recording_folderpath = None
+
     read_hdf5_images = read_cameras and (recording_folderpath is None)
     read_recording_folderpath = read_cameras and (recording_folderpath is not None)
 
@@ -329,6 +334,7 @@ def load_trajectory(
                 timestep["observation"].update(camera_obs)
         
         # Filter Steps #
+        #TODO: Add back in for Franka
         step_skipped = not timestep["observation"]["controller_info"].get("movement_enabled", True)
         delete_skipped_step = step_skipped and remove_skipped_steps
 
@@ -337,6 +343,7 @@ def load_trajectory(
             del timestep
         else:
             timestep_list.append(timestep)
+        # timestep_list.append(timestep)
 
     # Remove Extra Transitions #
     timestep_list = np.array(timestep_list)
@@ -370,41 +377,41 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
             'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
                         'exterior_image_1_left': tfds.features.Image(
-                            shape=(180, 320, 3),
+                            shape=(256, 256, 3),
                             dtype=np.uint8,
                             encoding_format='jpeg',
                             doc='Exterior camera 1 left viewpoint',
                         ),
                         'exterior_image_1_right': tfds.features.Image(
-                            shape=(180, 320, 3),
+                            shape=(256, 256, 3),
                             dtype=np.uint8,
                             encoding_format='jpeg',
                             doc='Exterior camera 1 right viewpoint'
                         ),
-                        'exterior_image_2_left': tfds.features.Image(
-                            shape=(180, 320, 3),
-                            dtype=np.uint8,
-                            encoding_format='jpeg',
-                            doc='Exterior camera 2 left viewpoint'
-                        ),
-                        'exterior_image_2_right': tfds.features.Image(
-                            shape=(180, 320, 3),
-                            dtype=np.uint8,
-                            encoding_format='jpeg',
-                            doc='Exterior camera 2 right viewpoint'
-                        ),
-                        'wrist_image_left': tfds.features.Image(
-                            shape=(180, 320, 3),
-                            dtype=np.uint8,
-                            encoding_format='jpeg',
-                            doc='Wrist camera RGB left viewpoint',
-                        ),
-                        'wrist_image_right': tfds.features.Image(
-                            shape=(180, 320, 3),
-                            dtype=np.uint8,
-                            encoding_format='jpeg',
-                            doc='Wrist camera RGB right viewpoint'
-                        ),
+                        # 'exterior_image_2_left': tfds.features.Image(
+                        #     shape=(256, 256, 3),
+                        #     dtype=np.uint8,
+                        #     encoding_format='jpeg',
+                        #     doc='Exterior camera 2 left viewpoint'
+                        # ),
+                        # 'exterior_image_2_right': tfds.features.Image(
+                        #     shape=(256, 256, 3),
+                        #     dtype=np.uint8,
+                        #     encoding_format='jpeg',
+                        #     doc='Exterior camera 2 right viewpoint'
+                        # ),
+                        # 'wrist_image_left': tfds.features.Image(
+                        #     shape=(256, 256, 3),
+                        #     dtype=np.uint8,
+                        #     encoding_format='jpeg',
+                        #     doc='Wrist camera RGB left viewpoint',
+                        # ),
+                        # 'wrist_image_right': tfds.features.Image(
+                        #     shape=(256, 256, 3),
+                        #     dtype=np.uint8,
+                        #     encoding_format='jpeg',
+                        #     doc='Wrist camera RGB right viewpoint'
+                        # ),
                         'cartesian_position': tfds.features.Tensor(
                             shape=(6,),
                             dtype=np.float64,
@@ -502,7 +509,7 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
         return {
-            'train': self._generate_examples(path='/iris/u/jyang27/2023-02-28'),
+            'train': self._generate_examples(path='/shared/projects/mirage2/local_collected_data/2024-06-04-cloth-franka'),
             #'val': self._generate_examples(''),
         }
 
@@ -517,52 +524,58 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
 
         def _parse_example(episode_path):
             FRAMESKIP = 1
-            IMAGE_SIZE = (320, 180)
+            IMAGE_SIZE = (256, 256)
 
-            h5_filepath = os.path.join(episode_path, 'trajectory.h5')
-            recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
-                
+            # TODO(kdharmarajan): Change back for Franka
+            # h5_filepath = episode_path
+            h5_filepath = os.path.join(episode_path, 'trajectory_im128.h5')
+            # recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
+            recording_folderpath = 'non-existent'
+
             traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
             data  = traj[::FRAMESKIP]
 
             assert all(t.keys() == data[0].keys() for t in data)
             for t in range(len(data)):
-                for key in data[0]['observation']['image'].keys():
-                    data[t]['observation']['image'][key] = _resize_and_encode(data[t]['observation']['image'][key], IMAGE_SIZE)
+                for key in data[0]['observation']['camera']['image'].keys():
+                    data[t]['observation']['camera']['image'][key] = _resize_and_encode(data[t]['observation']['camera']['image'][key], IMAGE_SIZE)
             
             # assemble episode --> here we're assuming demos so we set reward to 1 at the end
             episode = []
             for i, step in enumerate(data):
                 obs = step['observation']
                 action = step['action']
-                language_instruction = 'Execute a task.'
-                camera_type_dict = obs['camera_type']
-                wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
-                exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
+
+                # TODO(kdharmarajan): Actually update the language instruction
+                language_instruction = 'Sweep the green cloth to the left side of the table'
+                # camera_type_dict = obs['camera_type']
+                # wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
+                # exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
 
                 # compute Kona language embedding
                 language_embedding = self._embed([language_instruction])[0].numpy()
+                # import pdb; pdb.set_trace()
                 episode.append({
                     'observation': {
-                        'exterior_image_1_left': obs['image'][f'{exterior_ids[0]}_left'],
-                        'exterior_image_1_right': obs['image'][f'{exterior_ids[0]}_right'],
-                        'exterior_image_2_left': obs['image'][f'{exterior_ids[1]}_left'],
-                        'exterior_image_2_right': obs['image'][f'{exterior_ids[1]}_right'],
-                        'wrist_image_left': obs['image'][f'{wrist_ids[0]}_left'],
-                        'wrist_image_right': obs['image'][f'{wrist_ids[0]}_right'],
+                        'exterior_image_1_left': obs['camera']['image']['varied_camera_1_left_image'],
+                        'exterior_image_1_right': obs['camera']['image']['varied_camera_1_right_image'],
+                        # 'exterior_image_2_left': obs['camera']['image']['varied_camera_2_left_image'],
+                        # 'exterior_image_2_right': obs['camera']['image']['varied_camera_2_right_image'],
+                        # 'wrist_image_left': obs['camera']['image']['hand_camera_left_image'],
+                        # 'wrist_image_right': obs['camera']['image']['hand_camera_right_image'],
                         'cartesian_position': obs['robot_state']['cartesian_position'],
                         'joint_position': obs['robot_state']['joint_positions'],
-                        'gripper_position': np.array([obs['robot_state']['gripper_position']]),
+                        'gripper_position': np.array([obs['robot_state']['gripper_position']]).astype(np.float64),
                     },
                     'action_dict': {
                         'cartesian_position': action['cartesian_position'],
                         'cartesian_velocity': action['cartesian_velocity'],
-                        'gripper_position': np.array([action['gripper_position']]),
-                        'gripper_velocity': np.array([action['gripper_velocity']]),
+                        'gripper_position': np.array(action['gripper_position']).astype(np.float64),
+                        'gripper_velocity': np.array(action['gripper_velocity']).astype(np.float64),
                         'joint_position': action['joint_position'],
                         'joint_velocity': action['joint_velocity'],
                     },
-                    'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
+                    'action': np.concatenate((action['cartesian_position'], action['gripper_position'])),
                     'discount': 1.0,
                     'reward': float(i == (len(data) - 1)),
                     'is_first': i == 0,
@@ -584,18 +597,19 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
 
         # create list of all examples
         episode_paths = crawler(path)
-        episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
-                os.path.exists(p + '/recordings/MP4')]
+        # episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
+        #         os.path.exists(p + '/recordings/MP4')]
+        episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory_im128.h5')]
 
         # for smallish datasets, use single-thread parsing
-        for sample in episode_paths:
-            yield _parse_example(sample)
+        # for sample in episode_paths:
+        #     yield _parse_example(sample)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
-        #beam = tfds.core.lazy_imports.apache_beam
-        #return (
-        #         beam.Create(episode_paths)
-        #         | beam.Map(_parse_example)
-        #)
+        beam = tfds.core.lazy_imports.apache_beam
+        return (
+                beam.Create(episode_paths)
+                | beam.Map(_parse_example)
+        )
 
 
